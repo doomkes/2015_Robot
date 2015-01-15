@@ -9,6 +9,7 @@ class Robot: public IterativeRobot
 	int rearVal = 0;
 	double leftJoy = 0;
 	double rightJoy = 0;
+	Solenoid front, back;
 
 public:
 	Robot() :
@@ -16,7 +17,9 @@ public:
 			lStick(0),
 			rStick(1),
 			fMiddle(6),
-			bMiddle(7)
+			bMiddle(7),
+			front(1),
+			back(2)
 	{
 		tank.SetExpiration(0.1);
 	}
@@ -45,22 +48,29 @@ void TeleopPeriodic()
 {
 	leftJoy = lStick.GetY();
 	rightJoy = rStick.GetY();
-	tank.TankDrive(-leftJoy, -rightJoy, true);
 
 	if(lStick.GetRawButton(3))
 	{
 		frontVal = 1;
 		rearVal = -1;
+		front.Set(true);
+		back.Set(true);
 	}
 	else if (rStick.GetRawButton(3))
 	{
 			frontVal = -1;
 			rearVal = 1;
+			front.Set(true);
+			back.Set(true);
 	}
 	else
 		{
 			frontVal = 0;
 			rearVal = 0;
+			front.Set(false);
+			back.Set(false);
+			tank.TankDrive(-leftJoy, -rightJoy, true);
+
 		}
 
 	fMiddle.Set(frontVal);
