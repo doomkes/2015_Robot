@@ -3,23 +3,27 @@
 class Robot: public IterativeRobot
 {
 	RobotDrive tank; //normal drive wheels tank drive
-	Joystick lStick, rStick;
-	Talon fMiddle, bMiddle; //strafe motors
-	int frontVal = 0;
-	int rearVal = 0;
+	Joystick lStick, rStick, liftStick;
+	//Talon fMiddle, bMiddle; //strafe motors
+	Talon lift1, lift2;
+	//int frontVal = 0;
+	//int rearVal = 0;
 	double leftJoy = 0;
 	double rightJoy = 0;
-	Solenoid front, back;
+	//Solenoid front, back;
 
 public:
 	Robot() :
 			tank(0, 1, 8, 9),
 			lStick(0),
 			rStick(1),
-			fMiddle(6),
-			bMiddle(7),
-			front(1),
-			back(2)
+			liftStick(2),
+			lift1(6),
+			lift2(7)
+			//fMiddle(6),
+			//bMiddle(7),
+			//front(1),
+			//back(2)
 	{
 		tank.SetExpiration(0.1);
 	}
@@ -48,7 +52,11 @@ void TeleopPeriodic()
 {
 	leftJoy = lStick.GetY();
 	rightJoy = rStick.GetY();
+	tank.TankDrive(-leftJoy, -rightJoy, true);
+	lift1.Set(liftStick.GetY());
+	lift2.Set(liftStick.GetY());
 
+/*
 	if(lStick.GetRawButton(3))
 	{
 		frontVal = 1;
@@ -75,6 +83,8 @@ void TeleopPeriodic()
 
 	fMiddle.Set(frontVal);
 	bMiddle.Set(rearVal);
+*/
+
 }
 
 void TestPeriodic()
