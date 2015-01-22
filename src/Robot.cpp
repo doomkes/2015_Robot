@@ -53,8 +53,8 @@ void TeleopPeriodic()
 	leftJoy = lStick.GetY();
 	rightJoy = rStick.GetY();
 	tank.TankDrive(-leftJoy, -rightJoy, true);
-	lift1.Set(liftStick.GetY());
-	lift2.Set(liftStick.GetY());
+	lift1.Set(liftStick.GetY()*0.5);
+	lift2.Set(liftStick.GetY()*0.5);
 
 /*
 	if(lStick.GetRawButton(3))
