@@ -18,7 +18,7 @@
 #define LEFT_MOTOR_2 1
 #define FRONT_STRAFE_MOTOR_1 3
 #define FRONT_STRAFE_MOTOR_2 4
-#define LIFT_MOTOR 5
+#define PWM 5
 #define PWM_6 6
 #define BACK_STRAFE_MOTOR_1 6
 #define BACK_STRAFE_MOTOR_2 7
@@ -44,7 +44,7 @@
 
 
 //DIGITAL IO
-#define DIO_0
+#define Ultrasonic_Sensor 0
 #define DIO_1
 #define DIO_2
 #define DIO_3
