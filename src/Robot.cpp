@@ -1,5 +1,6 @@
 #include "WPILib.h"
 #include "RobotMap.h"
+#include "Autonomous.h"
 
 class Robot: public IterativeRobot
 {
@@ -7,9 +8,8 @@ class Robot: public IterativeRobot
 	CANTalon lift;
 	Victor fStrafe1, fStrafe2, bStrafe1, bStrafe2;	//lift and 4 strafe motors
 	Joystick lStick, rStick, liftStick;
-	Solenoid Cylinder;	//solenoids that control strafing wheel height
+	Solenoid Cylinders;	//solenoids that control strafing wheel height
 	Ultrasonic echo;
-	//CameraServer camera;
 	float frontVal = 0;
 	float rearVal = 0;
 	float leftJoyX = 0;
@@ -18,7 +18,13 @@ class Robot: public IterativeRobot
 	float rightJoyY = 0;
 	float liftJoy = 0;
 
+private:
+
+	//Command *autonomousCommand;
+	//SendableChooser *chooser;
+
 public:
+
 	Robot():
 		tank(LEFT_MOTOR_1, LEFT_MOTOR_2, RIGHT_MOTOR_1, RIGHT_MOTOR_2),
 		lift(0),
@@ -29,8 +35,7 @@ public:
 		lStick(LTANK_JOY_USB),
 		rStick(RTANK_JOY_USB),
 		liftStick(LIFT_JOY_USB),
-		Cylinder(FRONT_CYLINDER),
-		//camera()
+		Cylinders(FRONT_CYLINDER),
 		echo(0, 1, Ultrasonic::DistanceUnit::kInches)
 	{
 		tank.SetExpiration(0.1);
@@ -38,22 +43,26 @@ public:
 
 void RobotInit()
 {
-
+	//chooser = new SendableChooser();
+	//chooser->AddDefault("auto 1", new YellowTote());
+	//->AddObject("auto 2", new Container());
+	//SmartDashboard::PutData("Autonomous modes", chooser);
 }
 
 void AutonomousInit()
 {
-
+	//autonomousCommand = (Command *) chooser->GetSelected();
+	//autonomousCommand->Start();
 }
 
 void AutonomousPeriodic()
 {
-
+	//Scheduler::GetInstance()->Run();
 }
 
 void TeleopInit()
 {
-
+	echo.SetEnabled(true);
 }
 
 void TeleopPeriodic()
@@ -67,27 +76,18 @@ void TeleopPeriodic()
 	if ((lStick.GetRawButton(1)) || (rStick.GetRawButton(1))) {
 		frontVal = leftJoyX;
 		rearVal = -rightJoyX;
-		Cylinder.Set(true);
+		Cylinders.Set(true);
 		tank.TankDrive(0.0 ,0.0 ,false);
 	}
 	else {
-		Cylinder.Set(false);
+		Cylinders.Set(false);
 		tank.TankDrive(leftJoyY, rightJoyY, false);
 		frontVal = 0.0;
 		rearVal = 0.0;
 	}
 
 	echo.Ping();
-	printf("%f \n", echo.GetRangeInches());
-
-
-
-
-
-
-
-
-
+	printf("%f \n", echo.PIDGet());
 
 /*
 	//when strafing left
