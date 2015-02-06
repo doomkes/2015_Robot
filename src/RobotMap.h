@@ -14,21 +14,21 @@
 #define LIFT_JOY_USB 2
 
 // PWM OUTPUTS
-#define LEFT_MOTOR_1 0
-#define LEFT_MOTOR_2 1
-#define FRONT_STRAFE_MOTOR_1 3
-#define FRONT_STRAFE_MOTOR_2 4
-#define PWM 5
+#define LEFT_MOTOR 0
+#define FRONT_STRAFE_MOTOR 1
+#define RIGHT_MOTOR 2
+#define BACK_STRAFE_MOTOR_1 3
+#define PWM_4 4
+#define PWM_5 5
 #define PWM_6 6
-#define BACK_STRAFE_MOTOR_1 6
-#define BACK_STRAFE_MOTOR_2 7
-#define RIGHT_MOTOR_1 8
-#define RIGHT_MOTOR_2 9
+#define PWM_7 7
+#define PWM_8 8
+#define PWM_9 9
 
 // SOLENOID CHANNELS
-#define SOLENOID_0
-#define FRONT_CYLINDER 1
-#define BACK_CYLINDER 2
+#define CYLINDERS 0
+#define SOLENOID_1
+#define SOLENOID_2
 #define SOLENOID_3
 #define SOLENOID_4
 #define SOLENOID_5
@@ -41,7 +41,6 @@
 #define RELAY_1 1
 #define RELAY_2 2
 #define RELAY_3 3
-
 
 //DIGITAL IO
 #define Ultrasonic_Sensor 0
