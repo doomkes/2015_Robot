@@ -7,8 +7,10 @@ class Robot: public IterativeRobot
 	RobotDrive tank;	//normal drive wheels tank drive
 	CANTalon lift;
 	Victor fStrafe, bStrafe;	//lift and 2 strafe motors
+	Victor  fStrafe2, bStrafe2;
 	Joystick lStick, rStick, liftStick;
 	Solenoid Cylinders;	//solenoids that control strafing wheel height
+	Ultrasonic ultra;
 	SendableChooser autonChooser;
 	float frontVal = 0;
 	float rearVal = 0;
@@ -19,9 +21,10 @@ class Robot: public IterativeRobot
 	float liftJoy = 0;
 	float pickupInch = 1;
 	float current_position = 0;
-	float max_speed = 6;
+	float max_speed = 10;
 	float delta_time = 0;
 	float last_time = 0;
+	float turbo_mode = 0.7;
 	bool triggeralreadyPressed = false;
 	bool triggeralreadyUnpressed = true;
 	bool manualControl = false;
@@ -37,14 +40,17 @@ class Robot: public IterativeRobot
 public:
 
 	Robot():
-		tank(LEFT_MOTOR, RIGHT_MOTOR),
+		tank(LEFT_MOTOR, 4, RIGHT_MOTOR, 6),
 		lift(0),
 		fStrafe(FRONT_STRAFE_MOTOR),
 		bStrafe(BACK_STRAFE_MOTOR_1),
+		fStrafe2(5),
+		bStrafe2(7),
 		lStick(LTANK_JOY_USB),
 		rStick(RTANK_JOY_USB),
 		liftStick(LIFT_JOY_USB),
-		Cylinders(CYLINDERS)
+		Cylinders(CYLINDERS),
+		ultra(8, 9)
 
 
 	{
@@ -74,6 +80,7 @@ void RobotInit()
 
 void AutonomousInit()
 {
+	delta_time = 0;
 	//autonomousCommand = (Command *) chooser->GetSelected();
 	//autonomousCommand->Start();
 	switchInt = 1;
@@ -93,7 +100,6 @@ void AutonomousPeriodic()
 	encoderControl();
 	printf("%f \n", delta_time);
 }
-
 void TeleopInit()
 {
 
@@ -101,13 +107,28 @@ void TeleopInit()
 
 void TeleopPeriodic()
 {
+	ultra.SetAutomaticMode(true);
+	//int range = ultra.GetRangeInches();
+	//printf("range = %d\n", range);
 
 	encoderControl();
 	leftJoyX = lStick.GetX();
 	leftJoyY = lStick.GetY();
 	rightJoyX = rStick.GetX();
 	rightJoyY = rStick.GetY();
-	liftJoy = liftStick.GetY();
+	liftJoy = liftStick.GetRawAxis(4);
+	//printf("lift joystick value = %f", liftJoy);
+
+	if (lStick.GetRawButton(3)) {	//turbo mode
+		if (((leftJoyY-rightJoyY) <= 0.1)&&((leftJoyY-rightJoyY) >= -0.1)){		//10% range
+			leftJoyY = (leftJoyY+rightJoyY)/2;
+			rightJoyY = (leftJoyY+rightJoyY)/2;
+		}
+		turbo_mode = 1.0;
+		}
+	else turbo_mode = 0.7;
+
+	printf("%f %f\n",leftJoyY, rightJoyY);
 
 	if ((lStick.GetRawButton(1)) || (rStick.GetRawButton(1))) {	//strafing
 		frontVal = leftJoyX;
@@ -115,15 +136,15 @@ void TeleopPeriodic()
 		Cylinders.Set(true);
 		tank.TankDrive(0.0 ,0.0 ,false);
 	}
-	else if ((lStick.GetRawButton(2)) || (rStick.GetRawButton(2)))	{
+	else if ((lStick.GetRawButton(2)) || (rStick.GetRawButton(2)))	{	//strait strafe
 		Cylinders.Set(true);
 		tank.TankDrive(0.0 ,0.0 ,false);
 		frontVal = (leftJoyX + rightJoyX) / 2;
-		rearVal = (leftJoyX + rightJoyX) / -2;
+		rearVal = (leftJoyX + rightJoyX) / -3;
 	}
-	else {	//non strafing
+	else {			//non strafing
 		Cylinders.Set(false);
-		tank.TankDrive(-leftJoyY, -rightJoyY, false);
+		tank.TankDrive(-leftJoyY * turbo_mode, -rightJoyY * turbo_mode, true);
 		frontVal = 0.0;
 		rearVal = 0.0;
 	}
@@ -131,53 +152,53 @@ void TeleopPeriodic()
 	fStrafe.Set(frontVal);
 	bStrafe.Set(rearVal);
 
-	if (liftStick.GetRawButton(2))	//stage 1
+	if (liftStick.GetRawButton(1))	//stage 1
 		{
-		pickupInch = 4;
+		pickupInch = 7;
 		triggeralreadyPressed = false;
 		}
-	if (liftStick.GetRawButton(5))	//stage 2
+	if (liftStick.GetRawButton(2))	//stage 2
 		{
-		pickupInch = 8;
+		pickupInch = 19.1;
 		triggeralreadyPressed = false;
 		}
 	if (liftStick.GetRawButton(3))	//stage 3
 		{
-		pickupInch = 12;
+		pickupInch = 31.2;
 		triggeralreadyPressed = false;
 		}
 	if (liftStick.GetRawButton(4))	//stage 4
 		{
-		pickupInch = 16;
+		pickupInch = 43.3;
 		triggeralreadyPressed = false;
 		}
 	if (liftStick.GetRawButton(6))	//stage 5
 		{
-		pickupInch = 20;
+		pickupInch = 55.4;
 		triggeralreadyPressed = false;
 		}
-	if ((liftStick.GetRawButton(1))&&(!triggeralreadyPressed))
+	if ((liftStick.GetRawButton(8))&&(!triggeralreadyPressed)) //pickup mode
 	{
-		pickupInch = pickupInch - 2;
+		pickupInch = pickupInch - 7;
 		triggeralreadyPressed = true;
 		triggeralreadyUnpressed = false;
 	}
-	if ((!liftStick.GetRawButton(1))&&(!triggeralreadyUnpressed))
+	if ((!liftStick.GetRawButton(8))&&(!triggeralreadyUnpressed)) //stack mode
 	{
-		pickupInch = pickupInch + 2;
+		pickupInch = pickupInch + 7;
 		triggeralreadyPressed = false;
 		triggeralreadyUnpressed = true;
 	}
-	if (liftStick.GetRawButton(11))	//zero encoder
+	if (liftStick.GetRawButton(9))	//zero encoder
 		{
 		lift.SetPosition(0);
 		pickupInch = 0;
 		}
-	if (liftStick.GetRawButton(7))	//manual control on
+	if (liftStick.GetRawButton(5))	//manual control on
 	{
 		manualControl = true;
 	}
-	if (liftStick.GetRawButton(8))	//manual control off
+	if (liftStick.GetRawButton(7))	//manual control off
 	{
 		manualControl = false;
 	}
@@ -186,11 +207,13 @@ void TeleopPeriodic()
 	{
 		lift.SetControlMode(CANSpeedController::kPercentVbus);
 		lift.Set(-liftJoy);
+		delta_time = 0;
 	}
 	else lift.SetControlMode(CANSpeedController::kPosition);
 
 }
 
+//
 void TestPeriodic()
 {
 
@@ -224,33 +247,33 @@ void Container()	//auto
 {
 	switch (switchInt)
 		{
-			case 1:
+			case 1:	//bring lift up to pick up container
 				printf("case 1\n");
 				pickupInch = 24;
 				switchInt = 2;
 				break;
-			case 2:
+			case 2:	//wait for lift to get to position
 				printf("case 2\n");
-				if (time >= 0.5)
+				if (time >= 10)
 					{
 					switchInt = 3;
 					time = 0;
 					}
 				else time = time  + delta_time;
 				break;
-			case 3:
+			case 3:	//drive into auto zone
 			printf("case 3\n");
-				tank.TankDrive(-0.5, -0.5, false);
-				if (time >= 1.7) switchInt = 4;
+				tank.TankDrive(-0.2, -0.2, false);
+				if (time >= 0.0001) switchInt = 4;
 				else time = time + delta_time;
 				break;
-			case 4:
+			case 4:	//stop in auto zone
 			printf("case 4\n");
 				tank.TankDrive(0.0, 0.0, false);
 				switchInt = 5;
 				time = 0;
 				break;
-			case 5:
+			case 5:	//bring lift down
 			printf("case 5\n");
 				pickupInch = 0;
 				if (time >= 3.0)
@@ -260,13 +283,13 @@ void Container()	//auto
 					}
 				else time = time + delta_time;
 				break;
-			case 6:
+			case 6:	//back away
 			printf("case 6\n");
 				tank.TankDrive(-0.5, -0.5, false);
 				if (time >= 0.2) switchInt = 7;
 				else time = time + delta_time;
 				break;
-			case 7:
+			case 7:	//stop
 			printf("case 7\n");
 				tank.TankDrive(0.0, 0.0, false);
 				break;
@@ -274,16 +297,16 @@ void Container()	//auto
 				printf("%i \n", switchInt);
 		}
 }
-void RobotSet()
+void RobotSet()		//auto
 {
 	switch (switchInt)			//robot set
 		{
-			case 1:
+			case 1:	//drive into auto zone
 				tank.TankDrive(-0.5, -0.5, false);
 				if (time >= 800) switchInt = 2;
 				else time = time + 20;
 				break;
-			case 2:
+			case 2:	//stop
 				tank.TankDrive(0.0, 0.0, false);
 				break;
 
@@ -294,12 +317,12 @@ void YellowTote()	//auto
 
 	switch (switchInt)
 	{
-		case 1:
+		case 1:	//pick up tote
 			printf("case 1\n");
 			pickupInch = 8;
 			switchInt = 2;
 			break;
-		case 2:
+		case 2:	//wait for tote to rise
 			printf("case 2\n");
 			if (time >= 500)
 				{
@@ -308,35 +331,39 @@ void YellowTote()	//auto
 				}
 			else time = time  + 20;
 			break;
-		case 3:
+		case 3:	//tote will become your master
 		printf("case 3\n");
-			tank.TankDrive(-0.5, -0.5, false);
-			if (time >= 1600) switchInt = 4;
+			tank.TankDrive(-0.3, -0.3, false);
+			if (time >= 2450) {
+				switchInt = 4;
+			}
 			else time = time + 20;
 			break;
-		case 4:
+		case 4:	//be slave to tote
 		printf("case 4\n");
 			tank.TankDrive(0.0, 0.0, false);
+			Cylinders.Set(true);
 			switchInt = 5;
 			time = 0;
 			break;
-		case 5:
+		case 5:	//you will totes regret ever making a robot
 		printf("case 5\n");
 			pickupInch = 0;
 			if (time >= 1600)
 				{
+				Cylinders.Set(false);
 				switchInt = 6;
 				time = 0;
 				}
 			else time = time + 20;
 			break;
-		case 6:
+		case 6:	//"die you foolish human" ~Tote
 		printf("case 6\n");
-			tank.TankDrive(-0.5, -0.5, false);
-			if (time >= 200) switchInt = 7;
+			tank.TankDrive(-0.2, -0.2, false);
+			if (time >= 100) switchInt = 7;
 			else time = time + 20;
 			break;
-		case 7:
+		case 7:	//soon, the world will be lost...
 		printf("case 7\n");
 			tank.TankDrive(0.0, 0.0, false);
 			break;
