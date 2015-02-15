@@ -6,9 +6,9 @@ class Robot: public IterativeRobot
 	RobotDrive tank;	//normal drive wheels tank drive
 	CANTalon lift;
 	Victor fStrafe, bStrafe;	//lift and 2 strafe motors
-	Victor  fStrafe2, bStrafe2;
+	Victor  fStrafe2, bStrafe2;	//only for practice bot
 	Joystick lStick, rStick, liftStick;
-	Solenoid Cylinders;	//solenoids that control strafing wheel height
+	Solenoid Cylinders, claw;	//solenoids that control strafing wheel height
 	Ultrasonic ultra;
 	SendableChooser autonChooser;
 	float frontVal = 0;
@@ -32,22 +32,24 @@ class Robot: public IterativeRobot
 	int autoProgram = 1;
 	int lift_zero = 2;
 	int tote_flip = 1;
+	int container_flip = 1;
 
 
 public:
 
 	Robot():
-		//tank(LEFT_MOTOR, 4, RIGHT_MOTOR, 6),
-		tank(LEFT_MOTOR, RIGHT_MOTOR),
+		tank(LEFT_MOTOR, 4, RIGHT_MOTOR, 6),	//for practice robot
+		//tank(LEFT_MOTOR, RIGHT_MOTOR),	//for real robot
 		lift(0),
 		fStrafe(FRONT_STRAFE_MOTOR),
 		bStrafe(BACK_STRAFE_MOTOR_1),
-		fStrafe2(5),
-		bStrafe2(7),
+		fStrafe2(5),	//only for practice bot
+		bStrafe2(7),	//only for practice bot
 		lStick(LTANK_JOY_USB),
 		rStick(RTANK_JOY_USB),
 		liftStick(LIFT_JOY_USB),
 		Cylinders(CYLINDERS),
+		claw(1),
 		ultra(8, 9)
 
 
@@ -66,6 +68,8 @@ void RobotInit()
 	lift.SetIzone(512);
 	lift.SetCloseLoopRampRate(300);
 	lift.SetPosition(0);
+	lift.ConfigFwdLimitSwitchNormallyOpen(true);
+	lift.ConfigRevLimitSwitchNormallyOpen(false);
 
 	SmartDashboard::PutNumber("autoValue", 1);
 	SmartDashboard::PutString("autoChoose", "Yellow Tote = 1          Robot Set = 2         Container = 3");
@@ -107,6 +111,9 @@ void TeleopPeriodic()
 	rightJoyX = rStick.GetX();
 	rightJoyY = rStick.GetY();
 	liftJoy = liftStick.GetRawAxis(4);
+
+	if (liftStick.GetPOV() == 0) claw.Set(true);	//claw out
+	else claw.Set(false);	//claw in
 
 	if (lStick.GetRawButton(3)) {	//turb0 mode
 		if (((leftJoyY-rightJoyY) <= 0.1)&&((leftJoyY-rightJoyY) >= -0.1)){		//10% range
@@ -221,7 +228,7 @@ void TeleopPeriodic()
 				}
 				break;
 			case 3:	//drive backwards
-				tank.TankDrive(-1, -1);
+				tank.TankDrive(-0.7, -0.7);
 				if (current_position <= 7) tote_flip = 4;
 				break;
 			case 4:	//stop
@@ -230,7 +237,7 @@ void TeleopPeriodic()
 				if (current_position >= 19.1) tote_flip = 5;
 				break;
 			case 5:	//raise lift and drive forward
-				tank.TankDrive(0.7, 0.7);
+				tank.TankDrive(0.5, 0.5);
 				pickupInch = 13;
 				if (current_position <=13) tote_flip = 6;
 				break;
@@ -240,7 +247,7 @@ void TeleopPeriodic()
 				if (current_position <= 10) tote_flip = 7;
 				break;
 			case 7:	//pull backwards
-				tank.TankDrive(-1.0, -1.0);
+				tank.TankDrive(-0.5, -0.5);
 				if (current_position <= 7) tote_flip = 8;
 				break;
 			case 8:	//stop
@@ -258,7 +265,39 @@ void TeleopPeriodic()
 		lift.SetP(4);
 		tote_flip = 1;
 	}
-
+	if (rStick.GetRawButton(4)){	//container flipper
+			lift.SetP(4);
+			switch (container_flip){
+				case 1:	//bring lift to correct position
+					pickupInch = 20.25;
+					if (current_position == 20.25) container_flip = 2;
+					break;
+				case 2:	//start lowering it
+					tank.TankDrive(0.0, 0.0);
+					pickupInch = 12;
+					if (current_position <= 17.25){
+						container_flip = 3;
+					}
+					break;
+				case 3:	//drive backwards
+					tank.TankDrive(-0.45, -0.45);
+					if (current_position <= 12) container_flip = 4;
+					break;
+				case 4:	//stop
+					tank.TankDrive(0.0, 0.0);
+					pickupInch = 25;
+					if (current_position >= 25) container_flip = 5;
+					break;
+				case 5:	//wait for button to un-press
+					tank.TankDrive(0.0, 0.0);
+					if (!rStick.GetRawButton(4)) container_flip = 1;
+					break;
+			}
+		}
+	else {
+		lift.SetP(4);
+		container_flip = 1;
+	}
 }
 
 //
