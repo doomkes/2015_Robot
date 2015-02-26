@@ -120,8 +120,9 @@ void TeleopInit()
 void TeleopPeriodic()
 {
 	containerGrab.Set(liftStick.GetY()/2);
-	printf("it is at %f \n",liftStick.GetY());
+	printf("it is %f \n",liftStick.GetY());
 
+	//comment
 	ultraLeft.SetAutomaticMode(true);
 	ultraRight.SetAutomaticMode(true);
 	float rangeLeft = ultraLeft.GetRangeInches();
