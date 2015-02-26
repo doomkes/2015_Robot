@@ -7,6 +7,7 @@ class Robot: public IterativeRobot
 	CANTalon lift;
 	Victor fStrafe, bStrafe;	//lift and 2 strafe motors
 	Victor  fStrafe2, bStrafe2;	//only for practice bot
+	VictorSP containerGrab;
 	Joystick lStick, rStick, liftStick;
 	Solenoid Cylinders, claw;	//solenoids that control strafing wheel height
 	Ultrasonic ultraLeft, ultraRight;
@@ -48,6 +49,7 @@ public:
 		bStrafe(BACK_STRAFE_MOTOR_1),
 		fStrafe2(5),	//only for practice bot
 		bStrafe2(7),	//only for practice bot
+		containerGrab(9),
 		lStick(LTANK_JOY_USB),
 		rStick(RTANK_JOY_USB),
 		liftStick(LIFT_JOY_USB),
@@ -117,7 +119,8 @@ void TeleopInit()
 
 void TeleopPeriodic()
 {
-
+	containerGrab.Set(liftStick.GetY()/2);
+	printf("it is at %f \n",liftStick.GetY());
 
 	ultraLeft.SetAutomaticMode(true);
 	ultraRight.SetAutomaticMode(true);
@@ -126,7 +129,7 @@ void TeleopPeriodic()
 	//printf("Left = %f", rangeLeft);
 	//printf("      Right = %f \n", rangeRight);
 
-		//printf("Left %f Right %f Front %f Back %f \n", leftCode.GetDistance(),rightCode.GetDistance(),frontCode.GetDistance(),backCode.GetDistance());
+	//printf("Left %f Right %f Front %f Back %f \n", leftCode.GetDistance(),rightCode.GetDistance(),frontCode.GetDistance(),backCode.GetDistance());
 
 	encoderControl();
 	leftJoyX = lStick.GetX();
@@ -135,8 +138,9 @@ void TeleopPeriodic()
 	rightJoyY = rStick.GetY();
 	liftJoy = liftStick.GetRawAxis(4);
 
-	if (clawSwitch.Get()) claw.Set(true);	//limit switch pressed
-	else if (liftStick.GetPOV() == 0) claw.Set(true);	//manually forced out
+	if (liftStick.GetPOV() == 0) claw.Set(true);	//manual out
+	else if (liftStick.GetPOV() == 180) claw.Set(false);	//manual in
+	else if (clawSwitch.Get()) claw.Set(true);	//limit switch pressed
 	else claw.Set(false);	//not out
 
 	if (lStick.GetRawButton(3)) {	//turb0 mode
@@ -222,23 +226,15 @@ void TeleopPeriodic()
 			pickupInch = 7;
 			lift_zero = 1;
 	}
-	/*if (liftStick.GetRawButton(5))	//manual control on
-	{
-		manualControl = true;
-	}
-	if (liftStick.GetRawButton(7))	//manual control off
-	{
-		manualControl = false;
-	}
 
-	if (manualControl)
-	{
-		lift.SetControlMode(CANSpeedController::kPercentVbus);
-		lift.Set(-liftJoy);
-		delta_time = 0;
+	if ((lift.IsRevLimitSwitchClosed())&&(liftStick.GetRawAxis(3) < -0.1)) {	//manual up
+		 pickupInch = pickupInch - liftStick.GetRawAxis(3) * 0.2;
 	}
-	else lift.SetControlMode(CANSpeedController::kPosition);
-*/
+	if ((!lift.IsFwdLimitSwitchClosed())&&(liftStick.GetRawAxis(3) > 0.1)) {
+			 pickupInch = pickupInch - liftStick.GetRawAxis(3) * 0.2;	//manual down
+	}
+	printf("value = %i \n",lift.IsRevLimitSwitchClosed());
+
 	if (rStick.GetRawButton(5)){	//tote flipper
 		lift.SetP(4);
 		switch (tote_flip){
