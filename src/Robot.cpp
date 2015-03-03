@@ -7,10 +7,9 @@ class Robot: public IterativeRobot
 	CANTalon lift;
 	Victor fStrafe, bStrafe;	//lift and 2 strafe motors
 	Victor  fStrafe2;//only for practice bot
-	VictorSP containerGrab;
-	Servo leftServo, rightServo;
+	Servo camera;
 	Joystick lStick, rStick, liftStick;
-	Solenoid Cylinders, claw;	//solenoids that control strafing wheel height
+	Solenoid Cylinders, claw, leftPlow, rightPlow, testLight;	//solenoids that control strafing wheel height
 	Ultrasonic ultraLeft, ultraRight;
 	PowerDistributionPanel PDBoard;
 	Encoder frontCode, backCode, leftCode, rightCode;
@@ -34,7 +33,7 @@ class Robot: public IterativeRobot
 	int switchInt = 1;
 	int time = 0;
 	int autoProgram = 1;
-	int lift_zero = 2;
+	int lift_zero = 1;
 	int tote_flip = 1;
 	int container_flip = 1;
 	int autoLine = 1;
@@ -50,14 +49,15 @@ public:
 		fStrafe(FRONT_STRAFE_MOTOR),
 		bStrafe(BACK_STRAFE_MOTOR_1),
 		fStrafe2(5),	//only for practice bot
-		containerGrab(9),
-		leftServo(7),
-		rightServo(8),
+		camera(8),
 		lStick(LTANK_JOY_USB),
 		rStick(RTANK_JOY_USB),
 		liftStick(LIFT_JOY_USB),
 		Cylinders(CYLINDERS),
 		claw(1),
+		leftPlow(3),
+		rightPlow(4),
+		testLight(2),
 		ultraLeft(13, 12),	//real bot
 		ultraRight(11, 10),
 		//ultraLeft(10,11),	//practice bot
@@ -79,6 +79,7 @@ void RobotInit()
 	CameraServer::GetInstance()->StartAutomaticCapture("cam2");
 
 	lift.SetFeedbackDevice(CANTalon::QuadEncoder);
+	lift.SetSensorDirection(true);
 	lift.SelectProfileSlot(1);
 	lift.SetPID(4, 0.01, 0);
 	lift.SetIzone(512);
@@ -89,7 +90,7 @@ void RobotInit()
 	lift.SetControlMode(CANSpeedController::kPosition);
 
 	SmartDashboard::PutNumber("autoValue", 1);
-	SmartDashboard::PutString("autoChoose", "Yellow Tote = 1          Robot Set = 2         Container = 3         2 Container on step = 4");
+	SmartDashboard::PutString("autoChoose", "Yellow Tote = 1      Robot Set = 2      Container = 3      2 Container on step = 4      Double Tote Double Container = 5");
 
 	frontCode.SetDistancePerPulse(0.075398);
 	backCode.SetDistancePerPulse(0.075398);
@@ -107,39 +108,49 @@ void AutonomousInit()
 	autoProgram = SmartDashboard::GetNumber("autoValue", 1.000);
 
 	leftCode.Reset();
+	rightCode.Reset();
+	frontCode.Reset();
+	backCode.Reset();
 	toteState = 1;
 }
 
 void AutonomousPeriodic()
 {
+	encoderControl();
+	LiftZero();
 	if (autoProgram == 1) YellowTote();
 	if (autoProgram == 2) RobotSet();
 	if (autoProgram == 3) Container();
 	if (autoProgram == 4) StepContainer();
-	encoderControl();
+	if (autoProgram == 5) DoubleToteContainer();
 	//printf("%f \n", delta_time);
 }
 void TeleopInit()
 {
-	lift_zero = 2;
+
 }
 
 void TeleopPeriodic()
 {
-	printf("it is at %f",lift.GetEncPosition() /  91.428);
+	encoderControl();
+	LiftZero();
 
-	if (rStick.GetRawButton(9)){
-		//leftServo.Set(-1.0);
-		//rightServo.Set(1.0);
-		leftServo.SetAngle(0);
-		rightServo.SetAngle(180);
+	static int cameraDown = 1;
+	static bool manualCamera = false;
+	static bool pressed = false;
+	if (current_position <= 8) cameraDown = -1;
+	else cameraDown = 1;
+	if (liftStick.GetRawButton(11)&&!pressed){
+		if (manualCamera == true) manualCamera = false;
+		else if (manualCamera == false) manualCamera = true;
+		pressed = true;
 	}
-	if (rStick.GetRawButton(10)){
-		leftServo.SetAngle(180);
-		rightServo.SetAngle(0);
-	}
-	containerGrab.Set(liftStick.GetY()/2);
-	//printf("it is %f \n",liftStick.GetY());
+	if (!liftStick.GetRawButton(11)) pressed = false;
+	//printf("manual mode is %i \n",manualCamera);
+	if (manualCamera == true) camera.SetAngle(camera.GetAngle() - liftStick.GetY() * 4);
+	if (manualCamera == false) camera.SetAngle(((cos(27/(sqrt(279+((current_position - 8)*(current_position - 8)))))) * 180 / 3.14159 * cameraDown) + 60);
+	//camera.SetAngle((-liftStick.GetY() * 90) + 90);
+	//printf("fancy math = %f\n",(cos(27/(sqrt(279+((current_position - 8)*(current_position - 8)))))) * 180 / 3.14159);
 
 	ultraLeft.SetAutomaticMode(true);
 	ultraRight.SetAutomaticMode(true);
@@ -150,17 +161,16 @@ void TeleopPeriodic()
 
 	printf("Left %f Right %f Front %f Back %f \n", leftCode.GetDistance(),rightCode.GetDistance(),frontCode.GetDistance(),backCode.GetDistance());
 
-	encoderControl();
 	leftJoyX = lStick.GetX();
 	leftJoyY = lStick.GetY();
 	rightJoyX = rStick.GetX();
 	rightJoyY = rStick.GetY();
 	liftJoy = liftStick.GetRawAxis(4);
 
-	if (liftStick.GetPOV() == 0) claw.Set(true);	//manual out
-	else if (liftStick.GetPOV() == 180) claw.Set(false);	//manual in
-	else if (clawSwitch.Get()) claw.Set(true);	//limit switch pressed
-	else claw.Set(false);	//not out
+	if (liftStick.GetPOV() == 0) claw.Set(false);	//manual out
+	else if (liftStick.GetPOV() == 180) claw.Set(true);	//manual in
+	else if (clawSwitch.Get()) claw.Set(false);	//limit switch pressed
+	else claw.Set(true);	//not out
 
 	if (lStick.GetRawButton(3)) {	//turb0 mode
 		if (((leftJoyY-rightJoyY) <= 0.1)&&((leftJoyY-rightJoyY) >= -0.1)){		//10% range
@@ -178,13 +188,13 @@ void TeleopPeriodic()
 			Cylinders.Set(true);
 			tank.TankDrive(0.0 ,0.0 ,false);
 		}
-		else if ((lStick.GetRawButton(2)) || (rStick.GetRawButton(2)))	{	//strait strafe
+		else if ((lStick.GetRawButton(2)) || (rStick.GetRawButton(2))) {	//strait strafe
 			Cylinders.Set(true);
 			tank.TankDrive(0.0 ,0.0 ,false);
 			frontVal = (leftJoyX + rightJoyX) / 2;
 			rearVal = (leftJoyX + rightJoyX) / -3;
 		}
-		else if ((lStick.GetRawButton(3)) || (rStick.GetRawButton(3))){
+		else if ((lStick.GetRawButton(3)) || (rStick.GetRawButton(3))) {	//tote turn strafe
 			Cylinders.Set(true);
 			tank.TankDrive(0.0 ,0.0 ,false);
 			frontVal = (leftJoyX + rightJoyX) / 2 * 0.500;
@@ -208,22 +218,22 @@ void TeleopPeriodic()
 		}
 	if (liftStick.GetRawButton(2))	//stage 2
 		{
-		pickupInch = 19.1;
+		pickupInch = 18.53;
 		triggeralreadyPressed = false;
 		}
 	if (liftStick.GetRawButton(3))	//stage 3
 		{
-		pickupInch = 31.2;
+		pickupInch = 30.06;
 		triggeralreadyPressed = false;
 		}
 	if (liftStick.GetRawButton(4))	//stage 4
 		{
-		pickupInch = 43.3;
+		pickupInch = 41.59;
 		triggeralreadyPressed = false;
 		}
 	if (liftStick.GetRawButton(6))	//stage 5
 		{
-		pickupInch = 55.4;
+		pickupInch = 53.12;
 		triggeralreadyPressed = false;
 		}
 	if ((liftStick.GetRawButton(8))&&(!triggeralreadyPressed)) //pickup mode
@@ -237,19 +247,6 @@ void TeleopPeriodic()
 		pickupInch = pickupInch + 7;
 		triggeralreadyPressed = false;
 		triggeralreadyUnpressed = true;
-	}
-	switch (lift_zero)	{//automatic zero encoder
-		case 1:	//check for button press
-			if (liftStick.GetRawButton(9)) lift_zero = 2;
-			break;
-		case 2:	//bring lift down until it hits the limit switch
-			pickupInch = -100;
-			if (lift.IsFwdLimitSwitchClosed()) lift_zero = 3;
-			break;
-		case 3:	//stop it, and zero encoder
-			lift.SetPosition(0.75 *  91.428);
-			pickupInch = 7;
-			lift_zero = 1;
 	}
 
 	if ((lift.IsRevLimitSwitchClosed())&&(liftStick.GetRawAxis(3) < -0.1)) {	//manual up
@@ -403,7 +400,24 @@ void TestPeriodic()
 {
 
 }
-
+void LiftZero()
+{
+	switch (lift_zero)	{//automatic zero encoder
+			case 1:	//check for button press
+				if (liftStick.GetRawButton(9)) lift_zero = 2;
+				break;
+			case 2:	//bring lift down until it hits the limit switch
+				pickupInch = -100;
+				if (lift.IsFwdLimitSwitchClosed()) lift_zero = 3;
+				break;
+			case 3:	//stop it, and zero encoder
+				lift.SetPosition(0.25 *  178);
+				current_position = 0;
+				pickupInch = 7;
+				lift_zero = 1;
+				break;
+	}
+}
 void encoderControl()
 {
 	delta_time = Timer::GetFPGATimestamp() - last_time;
@@ -423,9 +437,9 @@ void encoderControl()
 			current_position = pickupInch;
 			}
 		}
-	lift.Set(-current_position * 91.428);
+	lift.Set(-current_position * 178);
 	last_time = Timer::GetFPGATimestamp();
-	//printf("delta time %f     current position %f      pickupInch %f      encoder Value %i \n", delta_time, current_position, pickupInch, lift.GetEncPosition());
+	printf("delta time %f     current position %f      pickupInch %f      encoder Value %i \n", delta_time, current_position, pickupInch, lift.GetEncPosition());
 }
 
 void Container()	//auto
@@ -433,7 +447,6 @@ void Container()	//auto
 	switch (toteState){
 			case 1:
 				printf("case 1\n");
-				leftCode.Reset();
 				pickupInch = 30;
 				if (current_position >= 29){
 					toteState = 2;
@@ -442,95 +455,31 @@ void Container()	//auto
 			case 2:
 				printf("case 2\n");
 				tank.TankDrive(-0.5, -0.5);
-				if (leftCode.GetDistance() <= -75){
+				if ((leftCode.GetDistance() <= -85)||(rightCode.GetDistance() <= -85)){
+					testLight.Set(true);
 					tank.TankDrive(0.0, 0.0);
-					pickupInch = 15;
-					toteState = 3;
-				}
-				break;
-			case 3:
-				printf("case 3");
-				tank.TankDrive(0.0, 0.0);
-				if (current_position <= 16){
-					leftCode.Reset();
-					tank.TankDrive(-0.1, -0.1);
-					toteState = 4;
-				}
-				break;
-			case 4:
-				printf("case 4");
-				if (leftCode.GetDistance() <= -2){
-					tank.TankDrive(0.0, 0.0);
+					lift_zero = 2;
 				}
 				break;
 		}
 
 
-	/*switch (switchInt)
-		{
-			case 1:	//bring lift up to pick up container
-				printf("case 1\n");
-				pickupInch = 24;
-				switchInt = 2;
-				break;
-			case 2:	//wait for lift to get to position
-				printf("case 2\n");
-				if (time >= 10)
-					{
-					switchInt = 3;
-					time = 0;
-					}
-				else time = time  + delta_time;
-				break;
-			case 3:	//drive into auto zone
-			printf("case 3\n");
-				tank.TankDrive(-0.2, -0.2, false);
-				if (time >= 0.0001) switchInt = 4;
-				else time = time + delta_time;
-				break;
-			case 4:	//stop in auto zone
-			printf("case 4\n");
-				tank.TankDrive(0.0, 0.0, false);
-				switchInt = 5;
-				time = 0;
-				break;
-			case 5:	//bring lift down
-			printf("case 5\n");
-				pickupInch = 0;
-				if (time >= 3.0)
-					{
-					switchInt = 6;
-					time = 0;
-					}
-				else time = time + delta_time;
-				break;
-			case 6:	//back away
-			printf("case 6\n");
-				tank.TankDrive(-0.5, -0.5, false);
-				if (time >= 0.2) switchInt = 7;
-				else time = time + delta_time;
-				break;
-			case 7:	//stop
-			printf("case 7\n");
-				tank.TankDrive(0.0, 0.0, false);
-				break;
-			default:
-				printf("%i \n", switchInt);
-		}*/
+
 }
 void RobotSet()		//auto
 {
-	switch (switchInt)			//robot set
+	switch (toteState)			//robot set
 		{
-			case 1:	//drive into auto zone
-				tank.TankDrive(-0.5, -0.5, false);
-				if (time >= 800) switchInt = 2;
-				else time = time + 20;
+			case 1:
+				tank.TankDrive(0.5, 0.5);
+				if (leftCode.GetDistance() >= 50){
+					toteState = 2;
+				}
 				break;
-			case 2:	//stop
-				tank.TankDrive(0.0, 0.0, false);
+			case 2:
+				tank.TankDrive(0.0, 0.0);
+				lift_zero = 2;
 				break;
-
 		}
 }
 void YellowTote()	//auto
@@ -540,113 +489,63 @@ void YellowTote()	//auto
 		switch (toteState){
 			case 1:
 				printf("case 1\n");
-				leftCode.Reset();
 				pickupInch = 6;
-				if (current_position >= 3){
+				tank.TankDrive(0.5, 0.5);
+				if (rightCode.GetDistance() >= 138){
+					testLight.Set(true);
 					toteState = 2;
 				}
 				break;
 			case 2:
 				printf("case 2\n");
-				tank.TankDrive(-0.5, -0.5);
-				if (leftCode.GetDistance() <= -75){
-					tank.TankDrive(0.0, 0.0);
-					pickupInch = 0;
-					toteState = 3;
-				}
+					tank.TankDrive(-0.5, -0.5);
+					testLight.Set(false);
+					if (rightCode.GetDistance() <= 135){
+						toteState = 3;
+					}
 				break;
 			case 3:
-				printf("case 3");
 				tank.TankDrive(0.0, 0.0);
-				if (current_position <= 0){
-					leftCode.Reset();
-					tank.TankDrive(-0.1, -0.1);
-					toteState = 4;
-				}
-				break;
-			case 4:
-				printf("case 4");
-				if (leftCode.GetDistance() <= -2){
-					tank.TankDrive(0.0, 0.0);
-				}
+				testLight.Set(true);
+				lift_zero = 2;
 				break;
 		}
 
-
-
-
-	/*switch (switchInt)
-	{
-		case 1:	//pick up tote
-			printf("case 1\n");
-			pickupInch = 8;
-			switchInt = 2;
-			break;
-		case 2:	//wait for tote to rise
-			printf("case 2\n");
-			if (time >= 500)
-				{
-				switchInt = 3;
-				time = 0;
-				}
-			else time = time  + 20;
-			break;
-		case 3:	//tote will become your master
-		printf("case 3\n");
-			tank.TankDrive(-0.3, -0.3, false);
-			if (time >= 2450) {
-				switchInt = 4;
-			}
-			else time = time + 20;
-			break;
-		case 4:	//be slave to tote
-		printf("case 4\n");
-			tank.TankDrive(0.0, 0.0, false);
-			Cylinders.Set(true);
-			switchInt = 5;
-			time = 0;
-			break;
-		case 5:	//you will totes regret ever making a robot
-		printf("case 5\n");
-			pickupInch = 0;
-			if (time >= 1600)
-				{
-				Cylinders.Set(false);
-				switchInt = 6;
-				time = 0;
-				}
-			else time = time + 20;
-			break;
-		case 6:	//"die you foolish human" ~Tote
-		printf("case 6\n");
-			tank.TankDrive(-0.2, -0.2, false);
-			if (time >= 100) switchInt = 7;
-			else time = time + 20;
-			break;
-		case 7:	//soon, the world will be lost...
-		printf("case 7\n");
-			tank.TankDrive(0.0, 0.0, false);
-			break;
-		default:
-			printf("%i \n", switchInt);
-	}
-	*/
 }
 void StepContainer()
 {
-	int switchVal = 1;
-	switch (switchVal){
+
+}
+void DoubleToteContainer()
+{
+	switch(toteState){
 		case 1:
-			tank.TankDrive(-0.5, -0.5);
-			if (leftCode.GetDistance() <= -37) {
-				leftServo.SetAngle(0);
-				rightServo.SetAngle(180);
-				tank.TankDrive(0.0, 0.0);
-				switchVal = 2;
+			Cylinders.Set(false);
+			tank.TankDrive(0.5, 0.5);
+			if ((rightCode.GetDistance() >= 108)){
+				testLight.Set(true);
+				Cylinders.Set(true);
+				toteState = 2;
 			}
 			break;
 		case 2:
 			tank.TankDrive(0.0, 0.0);
+			if (time == 10){
+				toteState = 3;
+				testLight.Set(false);
+				Cylinders.Set(false);
+			}
+			time ++;
+			break;
+		case 3:
+			tank.TankDrive(-0.4, -0.4);
+			if ((rightCode.GetDistance() <= 104)){
+				tank.TankDrive(0.0, 0.0);
+				testLight.Set(true);
+				Cylinders.Set(true);
+				leftPlow.Set(true);
+				rightPlow.Set(true);
+			}
 			break;
 	}
 }
