@@ -67,7 +67,7 @@ public:
 		leftCode(0,1,true,CounterBase::k4X),
 		rightCode(4,5,false,CounterBase::k4X),
 		clawSwitch(9),
-		aStrafeMove(20, 50, 1000, 81)
+		aStrafeMove(20, 50, 1000, 82.5)
 		//landfillMove(0.1, 1 ,0.6, 60.5)
 
 
@@ -764,10 +764,10 @@ void ToteStack()
 			if (bStrafe.GetEncPosition()/magic < 44){
 				pickupInch = 32;
 			}
-			else pickupInch = 32 - 20 * ((bStrafe.GetEncPosition()/magic - 44) / 37);
-			fStrafe.Set(-aStrafeMove.Position(autoTime) * magic);// * 81.5 / 77);
+			else pickupInch = 32 - 18 * ((bStrafe.GetEncPosition()/magic - 44) / 37);
+			fStrafe.Set(-aStrafeMove.Position(autoTime) * magic * 84 / 81);// * 81.5 / 77);
 			bStrafe.Set(aStrafeMove.Position(autoTime) * magic);
-			//tank.TankDrive(-0.4, -0.3);
+			tank.TankDrive(-0.4, -0.3);
 			autoTime += 0.02;
 			if (bStrafe.GetEncPosition()/magic >= 80 && aStrafeMove.Position(autoTime) * magic > 80.4){
 				fStrafe.SetControlMode(CANSpeedController::kPercentVbus);
@@ -819,7 +819,7 @@ void ToteStack()
 			}
 			break;
 		case 6:
-			//tank.TankDrive(-0.4, -0.3);
+			tank.TankDrive(-0.4, -0.3);
 			fStrafe.SetControlMode(CANSpeedController::kPosition);
 			bStrafe.SetControlMode(CANSpeedController::kPosition);
 			fStrafe.Set(-aStrafeMove.Position(autoTime) * magic);// * 81.5 / 77);
@@ -846,7 +846,7 @@ void ToteStack()
 			if (leftCode.GetDistance() >= 107){
 				tank.TankDrive(0.5, 0.5);
 			}
-			if (leftCode.GetDistance() >= 132){
+			if (leftCode.GetDistance() >= 127){
 				time = 0;
 				toteState = 8;
 			}
@@ -907,8 +907,8 @@ void PID()
 void Landfill()
 {
 	static float time = 0;
-	//fStrafe.SetControlMode(CANSpeedController::kPosition);
-	//bStrafe.SetControlMode(CANSpeedController::kPosition);
+	fStrafe.SetControlMode(CANSpeedController::kPercentVbus);
+	bStrafe.SetControlMode(CANSpeedController::kPercentVbus);
 	max_speed = 20;
 	//toteState = 0;
 	switch(toteState){
@@ -978,14 +978,14 @@ void Landfill()
 			tank.TankDrive(0.0, 0.0);
 			Cylinders.Set(true);
 			if (time > 15){
-				fStrafe.Set(0.9);
+				fStrafe.Set(0.55);
 				bStrafe.Set(-0.36);
 				//fStrafe.Set(landfillMove.Position(autoTime) * magic * 60 / 57);
 				//bStrafe.Set(-landfillMove.Position(autoTime) * magic);
 				//autoTime++;
 			}
 			time++;
-			if (fStrafe.GetEncPosition() / magic >= 57){
+			if (fStrafe.GetEncPosition() / magic >= 60){
 				time = 0;
 				toteState = 9;
 			}
