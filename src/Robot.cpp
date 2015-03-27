@@ -2,6 +2,7 @@
 #include "RobotMap.h"
 #include "TrapezoidalMove.h"
 #include "MyIterativeRobot.h"
+#include "LaserRange.h"
 
 class Robot: public MyIterativeRobot
 {
@@ -15,6 +16,7 @@ class Robot: public MyIterativeRobot
 	DigitalInput clawSwitch;
 	TrapezoidalMoveProfile aStrafeMove, landfillMove;
 	DigitalOutput IO10, IO11, IO12, IO13;
+	LaserRange ClawRange;
 	float frontVal = 0;
 	float rearVal = 0;
 	float leftJoyX = 0;
@@ -73,7 +75,8 @@ public:
 		IO10(8),
 		IO11(11),
 		IO12(12),
-		IO13(13)
+		IO13(13),
+		ClawRange()
 
 
 	{
@@ -123,6 +126,8 @@ void RobotInit()
 
 	leftCode.SetDistancePerPulse(0.075398);
 	rightCode.SetDistancePerPulse(0.075398);
+
+	ClawRange.Init();
 
 	SmartDashboard::PutNumber("Front P", 16);
 	SmartDashboard::PutNumber("Front I", 0.01);
