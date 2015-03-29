@@ -11,12 +11,15 @@
  */
 class LaserRange{
 	I2C VL6180;
-	Task m_task; 
+	Task m_task;
+	int m_distance;
+
 	
 public:
 	LaserRange();
 	~LaserRange();
-	int GetRange(void);
+	int GetDistance(void);
 	void Init(void);
+	void GetRange(void);
 
 };

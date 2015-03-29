@@ -3,6 +3,14 @@
 #include "TrapezoidalMove.h"
 #include "MyIterativeRobot.h"
 #include "LaserRange.h"
+#include "math.h"
+
+#define FRONT_STRAFE_FF (62.0/60.5) //bessie
+#define REAR_STRAFE_FF (61.5/60.5)  //bessie
+
+//function prototypes
+float getFrontStrafePosition(void);
+float getRearStrafePosition(void);
 
 class Robot: public MyIterativeRobot
 {
@@ -15,7 +23,7 @@ class Robot: public MyIterativeRobot
 	Encoder leftCode, rightCode;
 	DigitalInput clawSwitch;
 	TrapezoidalMoveProfile aStrafeMove, landfillMove;
-	DigitalOutput IO10, IO11, IO12, IO13;
+	DigitalOutput IO8, IO11, IO12, IO13;
 	LaserRange ClawRange;
 	float frontVal = 0;
 	float rearVal = 0;
@@ -44,6 +52,7 @@ class Robot: public MyIterativeRobot
 	float position = 0;
 	float autoTime = 0;
 	int stepMode = 0;
+	int switchState = 0;
 
 
 public:
@@ -71,8 +80,8 @@ public:
 		rightCode(4,5,false,CounterBase::k4X),
 		clawSwitch(9),
 		aStrafeMove(20, 50, 1000, 82.5),
-		landfillMove(20, 30 , 30, 61.5),
-		IO10(8),
+		landfillMove(20, 30 , 30, 60.5),
+		IO8(8),
 		IO11(11),
 		IO12(12),
 		IO13(13),
@@ -144,6 +153,7 @@ void DisabledPeriodic()
 	fStrafe.SelectProfileSlot(1);
 	bStrafe.SelectProfileSlot(1);
 	lift.SelectProfileSlot(1);
+	SmartDashboard::PutNumber("Laser Range", ClawRange.GetDistance());
 }
 void AutonomousInit()
 {
@@ -158,10 +168,14 @@ void AutonomousInit()
 	fStrafe.SetCloseLoopRampRate(SmartDashboard::GetNumber("Front Ramp Rate"));
 	bStrafe.SetCloseLoopRampRate(SmartDashboard::GetNumber("Back Ramp Rate"));
 
+	leftCode.Reset();
+	rightCode.Reset();
+
 	position = 0;
 
 	switchInt = 1;
 	delta_time = 0;
+	last_time = Timer::GetFPGATimestamp();
 	time = 0;
 	lift.SetPosition(0);
 	current_position = 0;
@@ -170,8 +184,6 @@ void AutonomousInit()
 
 	autoProgram = SmartDashboard::GetNumber("autoValue", 1.000);
 
-	leftCode.Reset();
-	rightCode.Reset();
 	toteState = 1;
 }
 
@@ -188,16 +200,28 @@ void AutonomousPeriodic()
 	if (autoProgram == 9) PID();
 	if (autoProgram == 10) Landfill2();
 	//printf("%f \n", delta_time);
-	SmartDashboard::PutNumber("Front Distance", fStrafe.GetEncPosition()/magic);
-	SmartDashboard::PutNumber("Back Distance", bStrafe.GetEncPosition()/magic);
+	SmartDashboard::PutNumber("Front Distance", getFrontStrafePosition());
+	SmartDashboard::PutNumber("Back Distance", getRearStrafePosition());
 	SmartDashboard::PutNumber("Left Distance", leftCode.GetDistance());
 	SmartDashboard::PutNumber("Right Distance", rightCode.GetDistance());
+	SmartDashboard::PutNumber("Front Error", fStrafe.GetClosedLoopError());
+	SmartDashboard::PutNumber("Back Error", bStrafe.GetClosedLoopError());
 
+}
+float getFrontStrafePosition(){
+	return fStrafe.GetEncPosition()/magic/FRONT_STRAFE_FF;
+}
+float getRearStrafePosition(){
+	return bStrafe.GetEncPosition()/magic/REAR_STRAFE_FF;
 }
 void TeleopInit()
 {
 	fStrafe.SetControlMode(CANSpeedController::kPercentVbus);
 	bStrafe.SetControlMode(CANSpeedController::kPercentVbus);
+	fStrafe.SetP(4);
+	fStrafe.SetI(0.0);
+
+	toteState = 1;
 }
 
 void TeleopPeriodic()
@@ -205,6 +229,11 @@ void TeleopPeriodic()
 	SmartDashboard::PutBoolean("limit switch", clawSwitch.Get());
 	SmartDashboard::PutNumber("Front Distance", fStrafe.GetEncPosition()/magic);
 	SmartDashboard::PutNumber("Back Distance", bStrafe.GetEncPosition()/magic);
+	SmartDashboard::PutNumber("Laser Range", ClawRange.GetDistance());
+	SmartDashboard::PutNumber("Left Distance", leftCode.GetDistance());
+	SmartDashboard::PutNumber("Right Distance", rightCode.GetDistance());
+
+
 
 	encoderControl();
 	LiftZero();
@@ -291,10 +320,19 @@ void TeleopPeriodic()
 	}
 	else rVal = 0;
 
-	IO10.Set(lStick.GetRawButton(1));
+
+
+
+	static bool toggle = false;
+	if (toggle) toggle = false;
+	else toggle = true;
+	IO8.Set(toggle);
 	IO11.Set(lStick.GetRawButton(1));
 	IO12.Set(lStick.GetRawButton(1));
 	IO13.Set(lStick.GetRawButton(1));
+
+
+
 
 
 	leftJoyX = lStick.GetX();
@@ -311,7 +349,7 @@ void TeleopPeriodic()
 	SmartDashboard::PutNumber("pov", liftStick.GetPOV());
 	if (liftStick.GetPOV() == 0) claw.Set(true);	//manual out
 	else if (liftStick.GetPOV() == 180) claw.Set(false);	//manual in
-	else if (!clawSwitch.Get()) claw.Set(true);	//limit switch pressed
+	else if (clawSwitch.Get()) claw.Set(true);	//limit switch pressed
 	else claw.Set(false);	//not out
 
 
@@ -341,20 +379,123 @@ void TeleopPeriodic()
 
 	//strafe/tankdrive mode
 
-	if (!lStick.GetRawButton(5)){	//not in auto line up mode
+	static bool auto_pressed = false;
+
 		if ((lStick.GetRawButton(1)) || (rStick.GetRawButton(1))) {	//strafing
-			frontVal = leftJoyX;
-			rearVal = -rightJoyX;
+			fStrafe.SetControlMode(CANSpeedController::kPercentVbus);
+			bStrafe.SetControlMode(CANSpeedController::kPercentVbus);
+			frontVal = pow(leftJoyX, 3);
+			rearVal = pow(rightJoyX, 3);
 			Cylinders.Set(true);
 			tank.TankDrive(0.0 ,0.0 ,false);
 		}
-		else if ((lStick.GetRawButton(2)) || (rStick.GetRawButton(2))) {	//strait strafe
+		/*else if (lStick.GetRawButton(2)) {	//strait strafe
+			fStrafe.SetControlMode(CANSpeedController::kPercentVbus);
+			bStrafe.SetControlMode(CANSpeedController::kPercentVbus);
 			Cylinders.Set(true);
 			tank.TankDrive(0.0 ,0.0 ,false);
 			frontVal = (leftJoyX + rightJoyX) / 2;
 			rearVal = (leftJoyX + rightJoyX) / -3;
 		}
+		*/
+		else if (rStick.GetRawButton(5)){
+			if (!auto_pressed) {
+				toteState = 1;
+				auto_pressed = true;
+			}
+			fStrafe.SetP(4);
+			fStrafe.SetI(0.0);
+			Landfill2();
+		}
+		else if (lStick.GetRawButton(2)){
+			fStrafe.SetControlMode(CANSpeedController::kSpeed);
+			bStrafe.SetControlMode(CANSpeedController::kSpeed);
+			Cylinders.Set(true);
+			frontVal = (leftJoyX + rightJoyX) * 5 / 2.47 * magic;
+			rearVal = (leftJoyX + rightJoyX) * 5 * magic;
+		}
+		else if (rStick.GetRawButton(3)){
+			fStrafe.SetControlMode(CANSpeedController::kSpeed);
+			bStrafe.SetControlMode(CANSpeedController::kSpeed);
+			Cylinders.Set(true);
+			if (rightJoyX < -0.2){
+				frontVal += 5;
+				rearVal += 5;
+			}
+			else if (rightJoyX > 0.2){
+				frontVal -= 5;
+				rearVal -= 5;
+			}
+			else {
+				frontVal = 0;
+				rearVal = 0;
+			}
+		}
+		else if (rStick.GetRawButton(2)){
+			fStrafe.SetControlMode(CANSpeedController::kPercentVbus);
+			bStrafe.SetControlMode(CANSpeedController::kPercentVbus);
+			Cylinders.Set(false);
+			static float last_distance = 0;
+			SmartDashboard::PutNumber("state", switchState);
+			switch (switchState){
+				case 0:
+					leftCode.Reset();
+					rightCode.Reset();
+					last_distance = 0;
+					pickupInch = 0;
+					if (current_position <= 0){
+						switchState = 1;
+					}
+					break;
+				case 1:
+					claw.Set(false);
+					tank.TankDrive(0.7, 0.7);
+					if ((leftCode.GetDistance() > 1) && (leftCode.GetDistance() - last_distance < 0.01)){
+						pickupInch = 17;
+						switchState = 2;
+					}
+					last_distance = leftCode.GetDistance();
+					break;
+				case 2:
+					tank.TankDrive(0.0, 0.0);
+					if
+					(current_position >= 2){
+						claw.Set(true);
+					}
+					if (current_position >= 16){
+						leftCode.Reset();
+						rightCode.Reset();
+						switchState = 3;
+					}
+					break;
+				case 3:
+					tank.TankDrive(0.5, 0.5);
+					if (leftCode.GetDistance() >= 9.5){
+						switchState = 4;
+					}
+					break;
+				case 4://stop and drop
+					tank.TankDrive(0.3, 0.3);
+					pickupInch = 0;
+					if (current_position <= 13){
+						 claw.Set(false);
+					}
+					if (current_position <= 0){
+						switchState = 0;
+						last_distance = 0;
+						leftCode.Reset();
+						rightCode.Reset();
+					}
+					break;
+			}
+		}
 		else {		//non strafing
+			fStrafe.SetP(4);
+			fStrafe.SetI(0.0);
+			pressed = false;
+			switchState = 0;
+			fStrafe.SetControlMode(CANSpeedController::kPercentVbus);
+			bStrafe.SetControlMode(CANSpeedController::kPercentVbus);
 			Cylinders.Set(false);
 			if (!ultraLock) tank.TankDrive(-(leftJoyY* leftJoyY* leftJoyY) * turbo_mode, -(rightJoyY*rightJoyY*rightJoyY) * turbo_mode, false);
 			else tank.TankDrive(lVal, rVal);
@@ -364,10 +505,9 @@ void TeleopPeriodic()
 			frontVal = 0.0;
 			rearVal = 0.0;
 		}
-	}
 
-
-
+		fStrafe.Set(frontVal);
+		bStrafe.Set(-rearVal);
 
 	//turbo lift mode
 
@@ -387,107 +527,61 @@ void TeleopPeriodic()
 
 
 
-	fStrafe.Set(frontVal*frontVal*frontVal);
-	bStrafe.Set(rearVal*rearVal*rearVal);
 
-	//if (liftStick.GetRawButton(5)) stepMode = 6;
-	//else stepMode = 0;
 
-	if (liftStick.GetRawButton(1))	//stage 1
-		{
-		pickupInch = 7;
-		triggeralreadyPressed = false;
-		}
-	if (liftStick.GetRawButton(2))	//stage 2
-		{
-		pickupInch = 18.53;
-		triggeralreadyPressed = false;
-		}
-	if (liftStick.GetRawButton(3))	//stage 3
+	if (liftStick.GetRawButton(9)) stepMode = 6;
+	else stepMode = 0;
 
-		{
-		pickupInch = 30.06;
-		triggeralreadyPressed = false;
-		}
-	if (liftStick.GetRawButton(4))	//stage 4
-		{
-		pickupInch = 41.59;
-		triggeralreadyPressed = false;
-		}
-	if (liftStick.GetRawButton(6))	//stage 5
-		{
-		pickupInch = 53.12;
-		triggeralreadyPressed = false;
-		}
-	if ((liftStick.GetRawButton(8))&&(!triggeralreadyPressed)) //pickup mode
-	{
-		pickupInch = pickupInch - 7;
-		triggeralreadyPressed = true;
-		triggeralreadyUnpressed = false;
-	}
-	if ((!liftStick.GetRawButton(8))&&(!triggeralreadyUnpressed)) //stack mode
-	{
-		pickupInch = pickupInch + 7;
-		triggeralreadyPressed = false;
-		triggeralreadyUnpressed = true;
-	}
-
-	if ((lift.IsRevLimitSwitchClosed())&&(liftStick.GetRawAxis(3) < -0.1)) {	//manual up
-		 pickupInch = pickupInch - liftStick.GetRawAxis(3) * 0.2 * lift_multiplier;
-	}
-	if ((pickupInch >= 0)&&(liftStick.GetRawAxis(3) > 0.1)) {
-			 pickupInch = pickupInch - liftStick.GetRawAxis(3) * 0.2 * lift_multiplier;	//manual down
-	}
-
-	//printf("case %i \n", autoLine);
-		switch (autoLine){	//auto line up
-			case 1:
-				if (lStick.GetRawButton(5)){
-					autoLine = 2;
-				}
-				break;
-			case 2:
-				if (rangeLeft >= 12){	//is too far to the left
-					Cylinders.Set(true);
-					frontVal = 0.4;
-					rearVal = -0.3;
-				}
-				if (rangeRight >= 12){	//is too far to the right
-					Cylinders.Set(true);
-					frontVal = -0.4;
-					rearVal = 0.3;
-				}
-				if ((rangeLeft < 12)&&(rangeRight < 12)){
-					frontVal = 0;
-					rearVal = 0;
-					autoLine = 3;
-				}
-				if(!lStick.GetRawButton(5)) autoLine = 1;
-				break;
-			case 3:
-				if (rangeLeft > rangeRight){
-					Cylinders.Set(true);
-					rearVal = 0.3;
-				}
-				if (rangeLeft < rangeRight){
-					Cylinders.Set(true);
-					rearVal = -0.3;
-				}
-				if ((rangeLeft-rangeRight < 0.5)&&(rangeLeft-rangeRight > -0.5)){
-					frontVal = 0.0;
-					autoLine = 4;
-				}
-				if(!lStick.GetRawButton(5)) autoLine = 1;
-				break;
-			case 4:
-				Cylinders.Set(false);
-				frontVal = 0;
-				rearVal = 0;
-				if (!lStick.GetRawButton(5)) autoLine = 1;
+	if (!rStick.GetRawButton(2) && !rStick.GetRawButton(5)){
+		if (liftStick.GetRawButton(1))	//stage 1
+			{
+			pickupInch = 7 + stepMode;
+			triggeralreadyPressed = false;
 			}
+		if (liftStick.GetRawButton(2))	//stage 2
+			{
+			pickupInch = 18.53 + stepMode;
+			triggeralreadyPressed = false;
+			}
+		if (liftStick.GetRawButton(3))	//stage 3
+
+			{
+			pickupInch = 30.06 + stepMode;
+			triggeralreadyPressed = false;
+			}
+		if (liftStick.GetRawButton(4))	//stage 4
+			{
+			pickupInch = 41.59 + stepMode;
+			triggeralreadyPressed = false;
+			}
+		if (liftStick.GetRawButton(6))	//stage 5
+			{
+			pickupInch = 53.12;
+			triggeralreadyPressed = false;
+			}
+		if ((liftStick.GetRawButton(8))&&(!triggeralreadyPressed)) //pickup mode
+		{
+			pickupInch = pickupInch - 7;
+			triggeralreadyPressed = true;
+			triggeralreadyUnpressed = false;
+		}
+		if ((!liftStick.GetRawButton(8))&&(!triggeralreadyUnpressed)) //stack mode
+		{
+			pickupInch = pickupInch + 7;
+			triggeralreadyPressed = false;
+			triggeralreadyUnpressed = true;
+		}
+
+		if ((lift.IsRevLimitSwitchClosed())&&(liftStick.GetRawAxis(3) < -0.1)) {	//manual up
+			 pickupInch = pickupInch - liftStick.GetRawAxis(3) * 0.2 * lift_multiplier;
+		}
+		if ((pickupInch >= 0)&&(liftStick.GetRawAxis(3) > 0.1)) {
+				 pickupInch = pickupInch - liftStick.GetRawAxis(3) * 0.2 * lift_multiplier;	//manual down
+		}
+	}
+
 }
 
-//
 void TestPeriodic()
 {
 
@@ -914,20 +1008,6 @@ void Landfill()
 	//toteState = 0;
 	switch(toteState){
 
-
-		case 0:
-			Cylinders.Set(true);
-			if (time > 20){
-				//fStrafe.Set(-landfillMove.Position(autoTime) * magic * 81 / 79);
-				//bStrafe.Set(landfillMove.Position(autoTime) * magic * 81 / 90);
-				autoTime++;
-				if (bStrafe.GetEncPosition() / magic >= 60){
-					Cylinders.Set(false);
-				}
-				time++;
-			}
-			time++;
-			break;
 		case 1:
 			claw.Set(false);
 			tank.TankDrive(0.55, 0.5);//drive forward to first tote
@@ -979,16 +1059,16 @@ void Landfill()
 			tank.TankDrive(0.0, 0.0);
 			Cylinders.Set(true);
 			if (time > 15){
-				fStrafe.Set(0.55);
-				bStrafe.Set(-0.36);
-				//fStrafe.Set(landfillMove.Position(autoTime) * magic * 60 / 57);
-				//bStrafe.Set(-landfillMove.Position(autoTime) * magic);
-				//autoTime++;
+				//fStrafe.Set(0.55);
+				//bStrafe.Set(-0.36);
+				fStrafe.Set(landfillMove.Position(autoTime) * magic * FRONT_STRAFE_FF);
+				bStrafe.Set(-landfillMove.Position(autoTime) * magic * REAR_STRAFE_FF);
+				autoTime += delta_time;
 			}
 			time++;
 			if (fStrafe.GetEncPosition() / magic >= 60){
 				time = 0;
-				toteState = 9;
+				//toteState = 9;
 			}
 			break;
 		case 9:
@@ -1052,23 +1132,26 @@ void Landfill()
 		case 16:
 			tank.TankDrive(-0.5,- 0.5);
 			if (leftCode.GetDistance() <= -30){
-				//pickupInch = 16;
+
 				toteState = 17;
 			}
 			break;
 		case 17:
 			tank.TankDrive(0.0, 0.0);
-			//if (current_position >= 1){
-			//	claw.Set(true);
-			//}
 			break;
 
 	}
 
 }
+
+#define FWD_SPEED 0.5 //bessie
+#define FWD_HOLD_SPEED 0.3 //bessie
+
 void Landfill2()
 {
 	static float time = 0;
+	static float last_distance = 0;
+	float drive_balance = 1;
 	fStrafe.SetControlMode(CANSpeedController::kPosition);
 	bStrafe.SetControlMode(CANSpeedController::kPosition);
 	max_speed = 20;
@@ -1079,48 +1162,62 @@ void Landfill2()
 		case 1:
 			claw.Set(false);
 			Cylinders.Set(false);
-			tank.TankDrive(0.5, 0.5);//drive forward to first tote
-			if (leftCode.GetDistance() >= 2){
-				pickupInch = 16;
+			tank.TankDrive(FWD_SPEED, FWD_SPEED + 0.05);//drive forward to first tote
+			if ((leftCode.GetDistance() > 1) && (leftCode.GetDistance() - last_distance < 0.01)){
+				pickupInch = 17;
 				toteState = 2;
 			}
+			last_distance = leftCode.GetDistance();
 			break;
 		case 2://stop when its far enough and pick up tote
 			tank.TankDrive(0.0, 0.0);
-			if (current_position >= 12){
+			if (current_position >= 16){
+				leftCode.Reset();
+				rightCode.Reset();
 				toteState = 3;
 			}
 			break;
 		case 3://bring tote over second tote
-			tank.TankDrive(0.5, 0.5);
+			tank.TankDrive(FWD_SPEED, FWD_SPEED + 0.05);
 			if (leftCode.GetDistance() >= 10){
 				toteState = 4;
 			}
 			break;
 		case 4://stop and drop
-			tank.TankDrive(0.0, 0.0);
+			tank.TankDrive(FWD_HOLD_SPEED, FWD_HOLD_SPEED + 0.05);
 			pickupInch = 0;
 			if (current_position <= 0){
 				toteState = 5;
+				last_distance = 0;
+				leftCode.Reset();
+				rightCode.Reset();
 			}
 			break;
 		case 5://drive to second tote and pick up
-			tank.TankDrive(0.4, 0.4);
-			if (leftCode.GetDistance() >= 20){
-				max_speed = 10;
+			tank.TankDrive(FWD_SPEED, FWD_SPEED + 0.05);
+			if ((leftCode.GetDistance() > 1) && (leftCode.GetDistance() - last_distance < 0.01)){
+				max_speed = 5;
 				pickupInch = 20;
 				toteState = 6;
 			}
+			last_distance = leftCode.GetDistance();
 			break;
 		case 6://stop
 			tank.TankDrive(0.0, 0.0);
+			if (current_position >= 2){
+				max_speed = 10;
+				claw.Set(true);
+			}
 			if (current_position >= 5){
+				leftCode.Reset();
+				rightCode.Reset();
 				toteState = 7;
 			}
 			break;
 		case 7:
-			tank.TankDrive(-0.5, -0.5);
-			if (leftCode.GetDistance() <= 0){
+			drive_balance = 1 + (-leftCode.GetDistance() + rightCode.GetDistance()) * 0.1;
+			tank.TankDrive(-0.7, -0.7 * drive_balance);
+			if (leftCode.GetDistance() <= -18){
 				toteState = 8;
 				autoTime = 0;
 			}
@@ -1131,90 +1228,80 @@ void Landfill2()
 			if (time > 15){
 				//fStrafe.Set(0.55);
 				//bStrafe.Set(-0.36);
-				fStrafe.Set(landfillMove.Position(autoTime) * magic * 88 / 81);
-				bStrafe.Set(-landfillMove.Position(autoTime) * magic);
-				autoTime += 0.02;
+				fStrafe.Set(landfillMove.Position(autoTime) * magic * FRONT_STRAFE_FF * 1.05);
+				bStrafe.Set(-landfillMove.Position(autoTime) * magic * REAR_STRAFE_FF);
+				autoTime += delta_time;
 			}
 			time++;
-			if (fStrafe.GetEncPosition() / magic >= 61){
+			if (getFrontStrafePosition() >= 60.5){
 				time = 0;
 				toteState = 9;
 			}
 			break;
 		case 9:
-			if (time >= 25){
 			Cylinders.Set(false);
-			tank.TankDrive(0.6, 0.6);
-			}
 			fStrafe.SetControlMode(CANSpeedController::kPercentVbus);
 			bStrafe.SetControlMode(CANSpeedController::kPercentVbus);
 			fStrafe.Set(0.0);
 			bStrafe.Set(0.0);
-			if (time >= 55){
-				leftCode.Reset();
-				toteState = 10;
-			}
-			time++;
+			leftCode.Reset();
+			rightCode.Reset();
+			last_distance = 0;
+			claw.Set(false);
+			pickupInch = 0;
+			toteState = 10;
 			break;
 		case 10:
-			tank.TankDrive(-0.5, -0.5);
-			if (leftCode.GetDistance() < -5){
-				pickupInch = 0;
+			if (current_position <= 0){
+				leftCode.Reset();
+				rightCode.Reset();
+				last_distance = 0;
+				tank.TankDrive(FWD_SPEED + 0.15, FWD_SPEED + 0.15);
 				toteState = 11;
 			}
 			break;
 		case 11:
-			tank.TankDrive(0.0, 0.0);
-			if (current_position <= 0){
-				claw.Set(false);
+			if ((leftCode.GetDistance() > 1) && (leftCode.GetDistance() - last_distance < 0.005)){
+				pickupInch = 17;
 				toteState = 12;
 			}
+			last_distance = leftCode.GetDistance();
 			break;
 		case 12:
-			tank.TankDrive(0.5, 0.5);
-			if (leftCode.GetDistance() >= -5){
-				pickupInch = 16;
+			tank.TankDrive(0.0, 0.0);
+			if (current_position >= 2){
+				claw.Set(true);
+			}
+			if (current_position >= 16){
+				leftCode.Reset();
+				rightCode.Reset();
 				toteState = 13;
 			}
 			break;
 		case 13:
-			tank.TankDrive(0.0, 0.0);
-			if (current_position >= 1){
-				claw.Set(true);
-
-			}
-			if (current_position >= 16){
+			tank.TankDrive(FWD_SPEED, FWD_SPEED);
+			if (leftCode.GetDistance() >= 12){
 				toteState = 14;
 			}
 			break;
 		case 14:
-			tank.TankDrive(0.5, 0.5);
-			if (leftCode.GetDistance() >= 2){
-				toteState = 15;
-			}
+			tank.TankDrive(FWD_HOLD_SPEED, FWD_HOLD_SPEED);
+				pickupInch = 12;
+				if (current_position <= 13){
+					leftCode.Reset();
+					rightCode.Reset();
+					toteState = 15;
+				}
 			break;
 		case 15:
-			tank.TankDrive(0.0, 0.0);
-			pickupInch = 0;
-			if (current_position <= 0){
-				claw.Set(false);
+			tank.TankDrive(0.5, 0.5);
+			if (leftCode.GetDistance() >= 4){
 				toteState = 16;
 			}
 			break;
 		case 16:
-			tank.TankDrive(-0.5,- 0.5);
-			if (leftCode.GetDistance() <= -84){
-				//pickupInch = 16;
-				toteState = 17;
-			}
-			break;
-		case 17:
 			tank.TankDrive(0.0, 0.0);
-			//if (current_position >= 1){
-			//	claw.Set(true);
-			//}
 			break;
-
 	}
 
 }
