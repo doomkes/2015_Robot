@@ -1,7 +1,7 @@
 #include "WPILib.h"
 #include "TrapezoidalMove.h"
 #include "MyIterativeRobot.h"
-#include "LaserRange.h"
+//#include "LaserRange.h"
 #include "math.h"
 
 #define FRONT_STRAFE_FF (1.05) //bessie
@@ -17,19 +17,19 @@ class Robot: public MyIterativeRobot
 	CANTalon lift, fStrafe, bStrafe;	//lift and 2 strafe motors
 	Servo camera;
 	Joystick lStick, rStick, liftStick;
-	Solenoid Cylinders, claw, leftPoke, capper, leftLight, rightLight;	//solenoids that control strafing wheel height
+	Solenoid Cylinders, claw, leftPoke, capDirection, capFlow;	// leftLight, rightLight,//solenoids that control strafing wheel height
 	Ultrasonic ultraLeft, ultraRight;
 	Encoder leftCode, rightCode;
 	DigitalInput clawSwitch;
 	TrapezoidalMoveProfile aStrafeMove, landfillMove;
-	LaserRange ClawRange;
+	//LaserRange ClawRange;
 	float frontVal = 0;
 	float rearVal = 0;
 	float leftJoyX = 0;
 	float leftJoyY = 0;
 	float rightJoyX = 0;
 	float rightJoyY = 0;
-	float liftJoy = 0;
+	//float liftJoy = 0;
 	float pickupInch = 1;
 	float current_position = 0;
 	float max_speed = 10;
@@ -68,9 +68,10 @@ public:
 		Cylinders(0),
 		claw(1),
 		leftPoke(2),
-		capper(3),
-		leftLight(4),
-		rightLight(5),
+		capDirection(3),
+		capFlow(4),
+		//leftLight(4),
+		//rightLight(5),
 		//ultraLeft(13, 12),
 		ultraLeft(7, 6),
 		//ultraRight(11, 10),
@@ -79,12 +80,13 @@ public:
 		rightCode(4,5,false,CounterBase::k4X),
 		clawSwitch(9),
 		aStrafeMove(20, 50, 1000, 82.5),
-		landfillMove(20, 25, 30, 60.5),
-		ClawRange()
+		landfillMove(20, 25, 30, 60.5)
+		//ClawRange()
 
 
 	{
 		tank.SetExpiration(0.5);
+		tank.SetSafetyEnabled(false);
 	}
 
 void RobotInit()
@@ -131,7 +133,7 @@ void RobotInit()
 	leftCode.SetDistancePerPulse(0.075398);
 	rightCode.SetDistancePerPulse(0.075398);
 
-	ClawRange.Init();
+	//ClawRange.Init();
 
 	SmartDashboard::PutNumber("Front P", 16);
 	SmartDashboard::PutNumber("Front I", 0.01);
@@ -148,7 +150,7 @@ void DisabledPeriodic()
 	fStrafe.SelectProfileSlot(1);
 	bStrafe.SelectProfileSlot(1);
 	lift.SelectProfileSlot(1);
-	SmartDashboard::PutNumber("Laser Range", ClawRange.GetDistance());
+	//SmartDashboard::PutNumber("Laser Range", ClawRange.GetDistance());
 }
 void AutonomousInit()
 {
@@ -223,7 +225,7 @@ void TeleopPeriodic()
 	SmartDashboard::PutBoolean("limit switch", clawSwitch.Get());
 	SmartDashboard::PutNumber("Front Distance", fStrafe.GetEncPosition()/magic);
 	SmartDashboard::PutNumber("Back Distance", bStrafe.GetEncPosition()/magic);
-	SmartDashboard::PutNumber("Laser Range", ClawRange.GetDistance());
+	//SmartDashboard::PutNumber("Laser Range", ClawRange.GetDistance());
 	SmartDashboard::PutNumber("Left Distance", leftCode.GetDistance());
 	SmartDashboard::PutNumber("Right Distance", rightCode.GetDistance());
 
@@ -231,14 +233,6 @@ void TeleopPeriodic()
 
 	encoderControl();
 	LiftZero();
-
-
-
-
-	//container grabber
-
-	if (liftStick.GetRawButton(5)) capper.Set(true);
-	else capper.Set(false);
 
 
 
@@ -276,6 +270,38 @@ void TeleopPeriodic()
 		//printf("fancy math = %f\n",(cos(27/(sqrt(279+((current_position - 8)*(current_position - 8)))))) * 180 / 3.14159);
 	}
 
+	//container grabber
+
+
+	static int capCount = 0;
+	capCount++;
+	if (!manualCamera){
+
+		if (liftStick.GetY() >= 0.1){
+			capDirection.Set(true);
+		}
+		else if (liftStick.GetY() <= -0.1){
+			capDirection.Set(false);
+		}
+		else {
+			capDirection.Set(false);
+			capFlow.Set(true);
+		}
+
+		float liftJoyY = liftStick.GetY();
+		liftJoyY = liftStick.GetY();
+
+		if (liftJoyY < 0) liftJoyY = -liftJoyY;
+
+		if (capCount == 1 && liftJoyY >= 0.1){
+			capFlow.Set(false);
+		}
+		if (capCount > 10 * (liftJoyY / 2 + 0.1)){
+			capFlow.Set(true);
+		}
+
+	}
+	if (capCount == 5) capCount = 0;
 
 
 
@@ -291,7 +317,7 @@ void TeleopPeriodic()
 	SmartDashboard::PutNumber("right range", rangeRight);
 	SmartDashboard::PutNumber("left range", rangeLeft);
 
-	if (rangeRight <= 8) rightLight.Set(true);
+	/*if (rangeRight <= 8) rightLight.Set(true);
 	else rightLight.Set(false);
 	if (rangeLeft <= 8) leftLight.Set(true);
 	else leftLight.Set(false);
@@ -313,7 +339,7 @@ void TeleopPeriodic()
 		lVal = -((rangeLeft - 8) / 8 * leftJoyY) + 0.3;
 	}
 	else rVal = 0;
-
+*/
 
 
 
@@ -321,7 +347,7 @@ void TeleopPeriodic()
 	leftJoyY = lStick.GetY();
 	rightJoyX = rStick.GetX();
 	rightJoyY = rStick.GetY();
-	liftJoy = liftStick.GetRawAxis(4);
+	//liftJoy = liftStick.GetRawAxis(4);
 
 
 
@@ -491,7 +517,7 @@ void TeleopPeriodic()
 			bStrafe.SetControlMode(CANSpeedController::kPercentVbus);
 			Cylinders.Set(false);
 			if (!ultraLock) tank.TankDrive(-(leftJoyY* leftJoyY* leftJoyY) * turbo_mode, -(rightJoyY*rightJoyY*rightJoyY) * turbo_mode, false);
-			else tank.TankDrive(lVal, rVal);
+			//else tank.TankDrive(lVal, rVal);
 			//else tank.TankDrive(-leftJoyY * ((rangeLeft - 5) / 5), -rightJoyY * ((rangeRight - 5) / 5));
 			SmartDashboard::PutNumber("right constraint", rightJoyY * ((rangeRight - 5) / 5));
 			SmartDashboard::PutNumber("left constraint", leftJoyY * ((rangeLeft - 5) / 5));
